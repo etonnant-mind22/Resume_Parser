@@ -6,3 +6,7 @@ spacy==2.3.5
 openai==0.26.5
 streamlit==1.18.1
 streamlit-chat==0.0.2.1
+pandas
+numpy
+python-docx
+nltk
