@@ -6,3 +6,9 @@ spacy==2.3.5
 openai==0.26.5
 streamlit==1.18.1
 streamlit-chat==0.0.2.1
+pytesseract==0.3.10
+pyresparser==1.0.6
+pandas==1.5.3
+nltk==3.8.1
+document==1.0
+en-core-web-sm==2.3.1
