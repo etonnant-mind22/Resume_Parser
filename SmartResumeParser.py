@@ -3,23 +3,19 @@ import pandas as pd
 import nltk
 import spacy
 from PIL import Image
-from pyresparser import ResumeParser
 from datetime import datetime
 from docx import Document
 import os
 import streamlit as st
 import openai
-import emoji
-import datetime
+from streamlit_chat import message
+import resume_parser
+import re
 
-
-nltk.download('stopwords')
 nlp = spacy.load("en_core_web_sm")
-pytesseract.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract"
 
 
 def main_page():
-
     st.title("#Company Name")
     st.subheader(" About Us")
     st.markdown("""
@@ -51,7 +47,7 @@ def page2():
     </style>
     """, unsafe_allow_html=True)
 
-    def add_bg_from_url1():
+    def add_bg_from_url():
         st.markdown(
             f"""
              <style>
@@ -65,34 +61,36 @@ def page2():
             unsafe_allow_html=True
         )
 
-    add_bg_from_url1()
+    add_bg_from_url()
 
     def main():
         resumes = st.file_uploader("Upload your Resumes and Images", type=["pdf", "docx", "jpg", 'jpeg'],
                                    accept_multiple_files=True)
-        progress_bar = st.progress(0)  # create a progress bar widget
-        for i, resumenew in enumerate(resumes):
+        if resumes is not None:
             all_data = []
             for resume in resumes:
                 if resume.type in ["application/pdf",
                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-                    data = ResumeParser(resume).get_extracted_data()
+                    with open(resume.name, "wb") as f:
+                        f.write(resume.getbuffer())
+                    # Parse the resume and display the extracted data
+                    data = resume_parser.ResumeParser(resume.name).get_extracted_data()
                     all_data.append(data)
                 else:
                     image = Image.open(resume)
                     text1 = pytesseract.image_to_string(image)
+                    text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]+', ' ', text1)
                     document = Document()
-                    document.add_paragraph(text1)
+                    document.add_paragraph(text)
                     document.save("document.docx")
                     document = "document.docx"
-                    data = ResumeParser(document).get_extracted_data()
+                    data = resume_parser.ResumeParser(document).get_extracted_data()
                     all_data.append(data)
-                progress_bar.progress((i + 1) / len(resumes))  # update the progress bar
             df = pd.DataFrame(all_data, columns=['name', 'email', 'mobile_number', 'skills', 'degree', 'experience',
                                                  'company_names'])
             df.insert(0, "TimeStamp", datetime.now())
             df.insert(0, 'New_ID', range(1, 1 + len(df)))
-            download = st.button("Download CSV File")
+            download = st.button("download")
             if 'download_state' not in st.session_state:
                 st.session_state.download_state = False
             if download or st.session_state.download_state:
@@ -130,38 +128,19 @@ def page2():
 
 def page3():
     # set OpenAI API key
-    openai.api_key = "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"
-
-    welcome_message = '''
-                <div style="background-color: #8A2BE2; color: #FFFFFF; padding: 20px; 
-                border-radius: 10px; text-align: center;">
-                  <h1>Welcome to our Chatbot! &#127881;</h1>
-                  <p>We're here to help answer any questions you may have. Just start typing and we'll do our best to 
-                  provide a helpful response. &#x1F60A;</p>
-                </div>
-            '''
-    st.write(welcome_message, unsafe_allow_html=True)
+    openai.api_key = "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"
 
     # define Streamlit app
     def generate_response(prompt):
-        try:
-            with st.spinner(text='Processing...'):
-                completions = openai.Completion.create(
-                    engine="text-davinci-003",
-                    prompt=prompt,
-                    max_tokens=1024,
-                    n=1,
-                    stop=None,
-                    temperature=0.5,
-                )
-            message = completions.choices[0].text
-            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            message = f"[{timestamp}] {message}"
-            message += ' ' + emoji.emojize(':smiling_face_with_smiling_eyes:')
-        except Exception as e:
-            message = "Sorry, something went wrong. Please try again later."
-            st.write("Error: ", e)
-            st.spinner('')
+        completions = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=1024,
+            n=1,
+            stop=None,
+            temperature=0.5,
+        )
+        message = completions.choices[0].text
         return message
 
     st.title("chatBot : Streamlit + openAI")
@@ -174,13 +153,8 @@ def page3():
         st.session_state['past'] = []
         # run Streamlit app
 
-    # add a "Clear Chat" button
-    if st.button("Clear Chat"):
-        st.session_state['generated'] = []
-        st.session_state['past'] = []
-
     def get_text():
-        input_text = st.text_input("Type all your Questions here...", key="input")
+        input_text = st.text_input("", key="input")
         return input_text
 
     user_input = get_text()
@@ -192,58 +166,10 @@ def page3():
         st.session_state.generated.append(output)
 
     if st.session_state['generated']:
-        chat_style = """
-        <style>
-        .chat-container {
-            display: flex;
-            flex-direction: column;
-            max-width: 600px;
-            margin: 20px auto;
-        }
-        .chat-bubble {
-            display: inline-block;
-            padding: 8px 12px;
-            margin: 4px;
-            border-radius: 20px;
-            max-width: 70%;
-            font-size: 16px;
-            line-height: 1.4;
-        }
-        .user-bubble {
-            background-color: #FFFFFF;
-            color: #000000;
-            border: 1px solid #CCCCCC;
-            align-self: flex-start;
-        }
-        .bot-bubble {
-            background-color: #008000;
-            color: #FFFFFF;
-            align-self: flex-end;
-        }
-        .timestamp {
-            font-size: 12px;
-            color: #666666;
-            margin-top: 5px;
-            text-align: right;
-        }
-        </style>
-        """
-        st.write(chat_style, unsafe_allow_html=True)
 
         for i in range(len(st.session_state['generated']) - 1, -1, -1):
-            if i > 0 and st.session_state['generated'][i - 1] != '':
-                st.write(
-                    f'<div class="chat-bubble bot-bubble">{emoji.emojize(":robot:")} '
-                    f'{st.session_state["generated"][i]}</div>',
-                    unsafe_allow_html=True, key=str(i))
-            else:
-                st.write(
-                    f'<div class="chat-bubble bot-bubble">{emoji.emojize(":robot:")} '
-                    f'{st.session_state["generated"][i]}</div>',
-                    unsafe_allow_html=True, key=str(i), help='The bot response')
-            st.write(
-                f'<div class="chat-bubble user-bubble">{emoji.emojize(":man:")} {st.session_state["past"][i]}</div>',
-                unsafe_allow_html=True, is_user=True, key=str(i) + '_user', help='The user input')
+            message(st.session_state["generated"][i], key=str(i))
+            message(st.session_state['past'][i], is_user=True, key=str(i) + '_user')
 
 
 page_names_to_funcs = {
